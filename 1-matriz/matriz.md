@@ -2,10 +2,10 @@
 
 **Integrantes:** Beatriz Marinello de Almeida - 24000134
 Bianca Vitória da Silva - 24788820
-Diego Adrian Santos Rodrigues De Sousa - 
+Diego Adrian Santos Rodrigues De Sousa - 20035416
 Miquéias Berne da Silva - 24014654
 Nayla Izis Mendes Ferreira -25007828
-Octávio Augusto Dos Santos Nascimento - 
+Octávio Augusto Dos Santos Nascimento - 24015129
 
 **Caso sorteado:** Ônibus: bilhetagem e mobilidade urbana (Caso 1)  
 **Envelope sorteado:** D. Empresa que vende para várias cidades, 25 desenvolvedores (Vários clientes; pico sazonal; falha isolada)  
