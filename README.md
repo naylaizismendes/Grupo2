@@ -8,5 +8,5 @@ Beatriz Marinello de Almeida - 24000134
 Bianca Vitória da Silva - 24788820
 Diego Adrian Santos Rodrigues-20035416
 Miquéias Berne da Silva - 24014654
-Nayla Izis Mendes Ferreira -25007828
-
+Nayla Izis Mendes Ferreira - 25007828
+Octávio Augusto dos Santos Nascimento - 24015139
