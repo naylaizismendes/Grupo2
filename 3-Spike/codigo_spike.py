@@ -127,3 +127,29 @@ def rodar_demonstracao():
 
 if __name__ == "__main__":
     rodar_demonstracao()
+
+
+
+
+
+"""
+======================================================================
+                    SAÍDA ESPERADA DO TERMINAL
+======================================================================
+
+=== TESTE DE ARQUITETURA (CASO ÔNIBUS - SAAS MULTI-CIDADE) ===
+
+1. Passando a catraca no Ônibus 01...
+2. Passando o mesmo cartão no Ônibus 02 (Tentativa de Fraude)...
+
+--- Processando dados na nuvem de Campinas ---
+ OK: Viagem do cartão CARD-123 no ônibus BUS-01 aprovada e contabilizada.
+ ! ALERTA DE FRAUDE: Cartão CARD-123 foi usado 2 vezes no mesmo ciclo!
+
+--- Testando se a sobrecarga de uma cidade afeta a outra ---
+ -> [Nuvem Sumaré] SOBRECARGA! Dados rejeitados para proteger a cidade.
+Status da nuvem de Campinas: 0 pendências. (Funciona perfeitamente!)
+
+=== TESTE CONCLUÍDO ===
+======================================================================
+"""
