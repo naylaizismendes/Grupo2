@@ -1,0 +1,8 @@
+=== DEMONSTRAÇÃO DO SPIKE REVISADO (ENTREGA 5) ===
+Saldo inicial do cartão: R$20.00
+Passagem de ida (07:00): True | Saldo restante no chip: R$15.00
+Passagem de volta (18:00): True | Saldo restante no chip: R$10.00
+Lote recebido pela nuvem: True
+Saldo contábil apurado na nuvem: R$10.00
+Alertas de fraude registrados: 0
+Saldo contábil após reenvio idempotente: R$10.00 (Sem duplicar cobrança!)

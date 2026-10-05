@@ -1,0 +1,30 @@
+%% Nível 1: Diagrama de Contexto (C4 Model)
+%% Projeto SIMUB - Grupo 02 (Caso 1 / Envelope D)
+flowchart TB
+    subgraph Pessoas["Usuários e Papéis"]
+        passageiro["<b>Passageiro</b><br/>[Pessoa]<br/>Consulta itinerários, recarrega e embarca"]
+        motorista["<b>Motorista / Fiscal</b><br/>[Pessoa]<br/>Opera validador e acompanha catraca"]
+        auditor["<b>Auditor / Órgão Gestor</b><br/>[Pessoa]<br/>Regula e audita repasse/subsídios"]
+    end
+
+    simub["<b>SIMUB - Sistema de Bilhetagem & Mobilidade</b><br/>[Sistema de Software]<br/>Plataforma multi-cidade para bilhetagem embarcada, telemetria e repasse contábil."]
+
+    subgraph Externos["Sistemas Externos"]
+        bancos["<b>Adquirentes & Bancos</b><br/>[Sistema Externo]<br/>Liquidação Pix e cartões"]
+        legados["<b>Sistemas Municipais de Trânsito</b><br/>[Sistema Externo]<br/>Bases legadas e fiscalização"]
+    end
+
+    passageiro -->|"Consulta e recarga<br/>[HTTPS / JSON]"| simub
+    motorista -->|"Operação de bordo<br/>[Interface física]"| simub
+    auditor -->|"Auditoria contábil<br/>[HTTPS / Portal]"| simub
+
+    simub -->|"Liquidação / Webhook<br/>[HTTPS / VPN]"| bancos
+    simub -->|"Exportação de viagens<br/>[SFTP / Lote batched]"| legados
+
+    classDef pessoa fill:#1168bd,stroke:#0b4884,color:#ffffff;
+    classDef sistema fill:#1168bd,stroke:#0b4884,color:#ffffff,font-weight:bold;
+    classDef externo fill:#686868,stroke:#404040,color:#ffffff;
+
+    class passageiro,motorista,auditor pessoa;
+    class simub sistema;
+    class bancos,legados externo;

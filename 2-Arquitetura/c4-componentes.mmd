@@ -1,0 +1,42 @@
+%% Nível 3: Diagrama de Componentes - Core da Célula (C4 Model)
+%% Projeto SIMUB - Grupo 02 (Caso 1 / Envelope D)
+flowchart LR
+    subgraph Core["Contêiner Core da Célula (Unidade de Implantação Monolítica)"]
+        direction TB
+
+        subgraph Driving["Adaptadores Primários (Driving)"]
+            ctrlRepasse["<b>Controlador REST de Repasse & Conciliação</b>"]
+            ctrlIngestao["<b>Controlador de Ingestão de Lotes Offline</b>"]
+            consGPS["<b>Consumidor de Posições GPS</b><br/>[Thread-pool isolado / Bulkhead]"]
+        end
+
+        subgraph Domain["Núcleo de Domínio & Casos de Uso"]
+            microkernel["<b>Microkernel: OrquestradorRepasse</b><br/>(+ Plugins de Regras Tarifárias Municipais)"]
+            ucConciliar["<b>Caso de Uso: ConciliarLoteViagens</b><br/>(Detecta duplicidade por tempo/nonce)"]
+            ucCredito["<b>Caso de Uso: AplicarCreditoDiferido</b><br/>(Compensa recarga e saldo pendente)"]
+        end
+
+        subgraph Driven["Adaptadores Secundários (Driven)"]
+            adapterPagto["<b>Adaptador de Pagamentos</b><br/>(Camada Anticorrupção - Bancos)"]
+            repoEventStore[("<b>Repositório EventStore</b><br/>(Gravação imutável append-only)")]
+            adapterCrypto["<b>Adaptador de Anonimização</b><br/>(Crypto-shredding / LGPD)"]
+        end
+    end
+
+    ctrlRepasse -->|"Chamada local"| microkernel
+    ctrlIngestao -->|"Chamada local"| ucConciliar
+    consGPS -->|"Chamada local"| ucCredito
+
+    microkernel -->|"Chamada remota"| adapterPagto
+    ucConciliar -->|"Acesso SQL"| repoEventStore
+    ucCredito -->|"Chamada local"| adapterCrypto
+
+    classDef driving fill:#2e7d32,stroke:#1b5e20,color:#ffffff;
+    classDef domain fill:#1565c0,stroke:#0d47a1,color:#ffffff;
+    classDef driven fill:#ad1457,stroke:#880e4f,color:#ffffff;
+    classDef db fill:#02539a,stroke:#01325d,color:#ffffff;
+
+    class ctrlRepasse,ctrlIngestao,consGPS driving;
+    class microkernel,ucConciliar,ucCredito domain;
+    class adapterPagto,adapterCrypto driven;
+    class repoEventStore db;

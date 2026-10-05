@@ -1,0 +1,47 @@
+%% Nível 2: Diagrama de Contêineres - Arquitetura Celular (C4 Model)
+%% Projeto SIMUB - Grupo 02 (Caso 1 / Envelope D)
+flowchart TB
+    subgraph Clientes["Interfaces de Entrada"]
+        app["<b>App Mobile Passageiro</b><br/>[Container: Flutter/React]<br/>Consulta e recarga"]
+        validador["<b>Validador Embarcado</b><br/>[Container: SQLite + C++]<br/>Autorização offline local em 300 ms"]
+        portal["<b>Portal do Gestor</b><br/>[Container: Single Page App]<br/>Gestão de parâmetros e relatórios"]
+    end
+
+    router["<b>Roteador de Células (Cell Router)</b><br/>[Reverse Proxy / Go Gateway Multi-AZ]<br/>Roteia por código de cidade"]
+
+    subgraph CelulaCampinas["Célula Campinas (Instância Autônoma e Isolada)"]
+        core["<b>Core da Célula Campinas</b><br/>[Monólito Modular]<br/>Validação, recarga, cadastro e regras"]
+        banco[("<b>Banco da Célula Campinas</b><br/>[PostgreSQL + EventStore]<br/>Isolado por cidade")]
+        barramento["<b>Barramento Local Campinas</b><br/>[Kafka / Redpanda]<br/>Eventos de bilhetagem e telemetria"]
+        faas["<b>Previsão & App Campinas</b><br/>[Serverless / FaaS]<br/>Consultas com concorrência provisionada"]
+    end
+
+    subgraph CelulaSantos["Célula Santos"]
+        santos["<b>Célula Santos</b><br/>[Instância Espelho Isolada]<br/>PostgreSQL, Kafka e FaaS próprios<br/>(Blast Radius Zero)"]
+    end
+
+    app -->|"Chamada remota HTTPS"| router
+    validador -->|"Descarga lote / GPS 4G<br/>[Assíncrono]"| router
+    portal -->|"Chamada remota HTTPS"| router
+
+    router -->|"Roteia Campinas"| core
+    router -->|"Roteia Santos"| santos
+
+    core -->|"Acesso SQL"| banco
+    core -->|"Publica Evento"| barramento
+    barramento -->|"Stream de Dados"| faas
+
+    classDef container fill:#1168bd,stroke:#0b4884,color:#ffffff;
+    classDef router fill:#0066cc,stroke:#004080,color:#ffffff,font-weight:bold;
+    classDef celula fill:#f4f4f4,stroke:#1168bd,stroke-width:2px,color:#000000;
+    classDef celulaOutra fill:#404040,stroke:#202020,color:#ffffff;
+    classDef banco fill:#02539a,stroke:#01325d,color:#ffffff;
+    classDef mq fill:#d97706,stroke:#b45309,color:#ffffff;
+    classDef faas fill:#6b21a8,stroke:#581c87,color:#ffffff;
+
+    class app,validador,portal,core container;
+    class router router;
+    class santos celulaOutra;
+    class banco banco;
+    class barramento mq;
+    class faas faas;
