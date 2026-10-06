@@ -11,7 +11,7 @@ Este spike valida em código funcional os conceitos definidos nas ADRs do SIMUB 
 
 ## Como executar
 
-Requisito: **Python 3.10+**.
+Requisito: **Python 3.12+**.
 
 Execute no terminal:
 

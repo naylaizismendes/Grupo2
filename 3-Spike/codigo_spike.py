@@ -1,150 +1,145 @@
+from __future__ import annotations
+
 import hashlib
 import hmac
+from dataclasses import dataclass
+from typing import Any
 
-# Chave de segurança usada para assinar o bilhete
-CHAVE_SEGURANCA = b"senha-do-validador"
+CHAVE_SEGURANCA_CIDADE = b"simub-chave-seguranca-v1"
 
 
-# Classe do bilhete
+@dataclass
 class Bilhete:
+    cartao_id: str
+    saldo: float
+    nonce: int = 0
 
-    def __init__(self, cartao_id: str, saldo: int, nonce: str):
-        self.cartao_id = cartao_id
-        self.saldo = saldo
-        self.nonce = nonce
-        self.assinatura = self.gerar_assinatura()
-
-    def gerar_assinatura(self) -> str:
-        # Cria uma hash segura para provar que o bilhete não é falso
-        dados = f"{self.cartao_id}:{self.saldo}:{self.nonce}".encode("utf-8")
-        return hmac.new(CHAVE_SEGURANCA, dados, hashlib.sha256).hexdigest()
+    def incrementar_nonce(self) -> int:
+        self.nonce += 1
+        return self.nonce
 
 
-# Validador do ônibus (OFFLINE) 
 class ValidadorOnibus:
+    def __init__(self, validador_id: str) -> None:
+        self.validador_id = validador_id
+        self.nonces_locais: set[tuple[str, int]] = set()
+        self.passagens_aceitas: list[dict[str, Any]] = []
 
-    def __init__(self, id_bus: str, cidade: str):
-        self.id_bus = id_bus
-        self.cidade = cidade
-        self.passagens_aceitas = []
+    def gerar_assinatura(self, cartao_id: str, saldo: float, nonce: int) -> str:
+        mensagem = f"{cartao_id}|{saldo}|{nonce}".encode("utf-8")
+        return hmac.new(CHAVE_SEGURANCA_CIDADE, mensagem, hashlib.sha256).hexdigest()
 
-    def Passar_catraca(self, bilhete: Bilhete, valor_tarifa: int, horario: int):
-        # Valida a assinatura de segurança offline
-        if bilhete.gerar_assinatura() != bilhete.assinatura:
-            print(f"[{self.id_bus}] BILHETE FALSO RECUSADO!")
-            return False
+    def passar_catraca(self, bilhete: Bilhete, tarifa: float, horario: int) -> tuple[bool, str]:
+        # 1. Verificação de Saldo
+        if bilhete.saldo < tarifa:
+            return False, "RECUSADO: saldo insuficiente"
 
-        if bilhete.saldo < valor_tarifa:
-            print(f"[{self.id_bus}] SALDO INSUFICIENTE!")
-            return False
+        # 2. Débito no Chip e Incremento de Nonce
+        bilhete.saldo -= tarifa
+        nonce_atual = bilhete.incrementar_nonce()
 
-        # Guarda a viagem no validador para enviar depois
+        # 3. Verificação de Reutilização no mesmo ônibus
+        chave_nonce = (bilhete.cartao_id, nonce_atual)
+        if chave_nonce in self.nonces_locais:
+            return False, "RECUSADO: nonce reutilizado localmente"
+
+        # 4. Assinatura HMAC
+        assinatura = self.gerar_assinatura(bilhete.cartao_id, bilhete.saldo, nonce_atual)
+
         registro = {
-            "cidade": self.cidade,
-            "bus": self.id_bus,
-            "cartao": bilhete.cartao_id,
-            "nonce": bilhete.nonce,
+            "tx_id": f"{self.validador_id}:{bilhete.cartao_id}:{nonce_atual}",
+            "cartao_id": bilhete.cartao_id,
+            "nonce": nonce_atual,
+            "validador_id": self.validador_id,
             "horario": horario,
+            "tarifa": tarifa,
+            "assinatura": assinatura,
         }
+
+        self.nonces_locais.add(chave_nonce)
         self.passagens_aceitas.append(registro)
-        return True
+        return True, "APROVADO: viagem autorizada"
 
 
-# Sistema da cidade na nuvem (célula da cidade) 
 class SistemaCidadeNuvem:
+    def __init__(self) -> None:
+        self.transacoes_processadas: set[str] = set()
+        self.nonces_globais: set[tuple[str, int]] = set()
+        self.alertas_clonagem: list[str] = []
+        self.saldo_contabil: float = 0.0
 
-    def __init__(self, nome_cidade: str, limite_fila: int):
-        self.nome_cidade = nome_cidade
-        self.limite_fila = limite_fila
-        self.fila_recebimento = []
-        self.usos_registrados = set()
+    def processar_lote_onibus(self, lote: list[dict[str, Any]]) -> list[str]:
+        resultados = []
+        for tx in lote:
+            tx_id = tx["tx_id"]
+            cartao_id = tx["cartao_id"]
+            nonce = tx["nonce"]
+            chave_global = (cartao_id, nonce)
 
-    def receber_dados_do_onibus(self, dados_onibus: list):
-        # Proteção de contrapressão: se a fila estourar, rejeita para não derrubar o sistema
-        if len(self.fila_recebimento) + len(dados_onibus) > self.limite_fila:
-            print(f" -> [Nuvem {self.nome_cidade}] SOBRECARGA! Dados rejeitados para proteger a cidade.")
-            return False
+            # A) IDEMPOTÊNCIA: Reenvio de lote por falha de rede (mesmo tx_id)
+            if tx_id in self.transacoes_processadas:
+                resultados.append(f"IGNORE: Transação {tx_id} já processada anteriormente (idempotente).")
+                continue
 
-        self.fila_recebimento.extend(dados_onibus)
-        return True
+            # B) DETECÇÃO DE CLONAGEM / DUPLICIDADE ENTRE ÔNIBUS DIFERENTES
+            if chave_global in self.nonces_globais:
+                alerta = f"ALERTA FRAUDE: Cartão {cartao_id} usou o mesmo nonce {nonce} em ônibus diferente!"
+                self.alertas_clonagem.append(alerta)
+                resultados.append(f"RECUSADO NA NUVEM: Clonagem detectada no cartão {cartao_id}.")
+                continue
 
-    def processar_e_detectar_fraudes(self):
-        print(f"\n--- Processando dados na nuvem de {self.nome_cidade} ---")
-        while self.fila_recebimento:
-            viagem = self.fila_recebimento.pop(0)
-            chave_uso = f"{viagem['cartao']}:{viagem['nonce']}"
+            # C) Processamento válido na nuvem
+            self.transacoes_processadas.add(tx_id)
+            self.nonces_globais.add(chave_global)
+            self.saldo_contabil += tx["tarifa"]
+            resultados.append(f"SUCESSO NUVEM: Transação {tx_id} consolidada no repasse.")
 
-            # Verifica se o mesmo bilhete foi usado em dois ônibus diferentes offline
-            if chave_uso in self.usos_registrados:
-                print(f" ! ALERTA DE FRAUDE: Cartão {viagem['cartao']} foi usado 2 vezes no mesmo ciclo!")
-            else:
-                self.usos_registrados.add(chave_uso)
-                print(f" OK: Viagem do cartão {viagem['cartao']} no ônibus {viagem['bus']} aprovada e contabilizada.")
+        return resultados
 
 
-# Execução do teste 
-def rodar_demonstracao():
-    print("=== TESTE DE ARQUITETURA (CASO ÔNIBUS - SAAS MULTI-CIDADE) ===")
+def executar_spike_completo():
+    print("=== SPIKE REVISADO SIMUB - VALIDAÇÃO, CLONAGEM E IDEMPOTÊNCIA ===")
+    print()
 
-    # Criando as cidades (células isoladas)
-    nuvem_campinas = SistemaCidadeNuvem(nome_cidade="Campinas", limite_fila=10)
-    nuvem_sumare = SistemaCidadeNuvem(nome_cidade="Sumaré", limite_fila=1)  # Limite pequeno para testar o estouro
+    # 1. Viagem Legítima (Ônibus 01)
+    cartao = Bilhete(cartao_id="CARTAO-001", saldo=20.0)
+    onibus_1 = ValidadorOnibus(validador_id="BUS-01")
 
-    # Criando 1 bilhete com R$ 20,00 de saldo
-    meu_cartao = Bilhete(cartao_id="CARD-123", saldo=2000, nonce="TICKET-001")
+    ok, msg = onibus_1.passar_catraca(cartao, tarifa=5.0, horario=700)
+    print(f"Passagem 1 (Ônibus 1, 07h): {msg} | Saldo Restante: R${cartao.saldo:.2f}")
 
-    # Criando dois ônibus de Campinas
-    onibus1 = ValidadorOnibus(id_bus="BUS-01", cidade="Campinas")
-    onibus2 = ValidadorOnibus(id_bus="BUS-02", cidade="Campinas")
+    # 2. Simulação de Clonagem (Cartão clonado usado no Ônibus 02 com o mesmo Nonce)
+    cartao_clonado = Bilhete(cartao_id="CARTAO-001", saldo=20.0, nonce=0)  # Força o mesmo nonce=1
+    onibus_2 = ValidadorOnibus(validador_id="BUS-02")
 
-    # SIMULAÇÃO 1: O passageiro passa o mesmo cartão nos dois ônibus em modo offline
-    print("\n1. Passando a catraca no Ônibus 01...")
-    onibus1.Passar_catraca(meu_cartao, valor_tarifa=500, horario=1000)
+    ok_clone, msg_clone = onibus_2.passar_catraca(cartao_clonado, tarifa=5.0, horario=710)
+    print(f"Passagem Clonada (Ônibus 2, 07h10): {msg_clone} | Saldo Restante: R${cartao_clonado.saldo:.2f}")
+    print()
 
-    print("2. Passando o mesmo cartão no Ônibus 02 (Tentativa de Fraude)...")
-    onibus2.Passar_catraca(meu_cartao, valor_tarifa=500, horario=1010)
+    # 3. Consolidação dos lotes na Nuvem (Descarga de dados 4G)
+    nuvem = SistemaCidadeNuvem()
 
-    # SIMULAÇÃO 2: Os ônibus chegam na garagem e descarregam os dados na nuvem de Campinas
-    nuvem_campinas.receber_dados_do_onibus(onibus1.passagens_aceitas)
-    nuvem_campinas.receber_dados_do_onibus(onibus2.passagens_aceitas)
+    print("--- Processando Lote do Ônibus 01 na Nuvem ---")
+    res_nuvem_1 = nuvem.processar_lote_onibus(onibus_1.passagens_aceitas)
+    for r in res_nuvem_1:
+        print(r)
 
-    # A nuvem de Campinas processa e pega a fraude
-    nuvem_campinas.processar_e_detectar_fraudes()
+    print("\n--- Processando Lote do Ônibus 02 na Nuvem (Detecção de Clonagem) ---")
+    res_nuvem_2 = nuvem.processar_lote_onibus(onibus_2.passagens_aceitas)
+    for r in res_nuvem_2:
+        print(r)
 
-    # SIMULAÇÃO 3: Testando o Isolamento de Cidades (Envelope D)
-    print("\n--- Testando se a sobrecarga de uma cidade afeta a outra ---")
-    dados_demais = [
-        {"cartao": "C1", "nonce": "N1"},
-        {"cartao": "C2", "nonce": "N2"},
-    ]
-    # Sumaré vai estourar o limite e rejeitar
-    nuvem_sumare.receber_dados_do_onibus(dados_demais)
+    print("\n--- Simulação de Reenvio de Lote por Falha de Rede (Idempotência) ---")
+    res_reenvio = nuvem.processar_lote_onibus(onibus_1.passagens_aceitas)
+    for r in res_reenvio:
+        print(r)
 
-    # Verificando se Campinas continua funcionando normalmente mesmo com Sumaré falhando
-    print(f"Status da nuvem de Campinas: {len(nuvem_campinas.fila_recebimento)} pendências. (Funciona perfeitamente!)")
-    print("\n=== TESTE CONCLUÍDO ===")
+    print("\n=== RESUMO DA OPERAÇÃO NA NUVEM ===")
+    print(f"Saldo Financeiro Apurado: R${nuvem.saldo_contabil:.2f}")
+    print(f"Alertas de Fraude/Clonagem: {len(nuvem.alertas_clonagem)}")
+    for a in nuvem.alertas_clonagem:
+        print("  ->", a)
 
 
 if __name__ == "__main__":
-    rodar_demonstracao()
-
-
-
-
-
-
-=== TESTE DE ARQUITETURA (CASO ÔNIBUS - SAAS MULTI-CIDADE) ===
-
-1. Passando a catraca no Ônibus 01...
-2. Passando o mesmo cartão no Ônibus 02 (Tentativa de Fraude)...
-
---- Processando dados na nuvem de Campinas ---
-OK: Viagem do cartão CARD-123 no ônibus BUS-01 aprovada e contabilizada.
-! ALERTA DE FRAUDE: Cartão CARD-123 foi usado 2 vezes no mesmo ciclo!
-
---- Testando se a sobrecarga de uma cidade afeta a outra ---
--> [Nuvem Sumaré] SOBRECARGA! Dados rejeitados para proteger a cidade.
-Status da nuvem de Campinas: 0 pendências. (Funciona perfeitamente!)
-
-=== TESTE CONCLUÍDO ===
-
+    executar_spike_completo()
